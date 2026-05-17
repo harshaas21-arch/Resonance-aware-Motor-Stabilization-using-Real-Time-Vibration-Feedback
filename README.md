@@ -36,3 +36,23 @@ the embedded controller and the browser.
 The result is a compact, fully self-contained embedded system that demonstrates the practical integration 
 of inertial sensing, digital signal conditioning, closed-loop feedback control, and wireless human-machine 
 interface design — all running on a single microcontroller board.
+
+Working Principle:
+
+At startup the ESP32 initialises the I2C bus on GPIO 21 (SDA) and GPIO 22 (SCL) and configures the 
+ADXL345. It then connects to the specified WiFi network, starts an HTTP server on port 80 to serve the 
+MOTOCTRL dashboard page, and opens a WebSocket server on port 81 for bidirectional binary-latency 
+communication. The main control loop executes every 10 ms and performs the following sequence: 
+1. Read the 12-bit ADC value from the potentiometer connected to GPIO 34. Map this value 
+linearly to a desired PWM duty cycle in the range 0–255. 
+2. Poll the ADXL345 for a new acceleration sample. Compute the absolute deviation of the Z-axis 
+reading from the baseline gravitational acceleration (9.8 m/s2) to isolate dynamic vibration. 
+3. Apply an EMA filter with coefficient 0.3 to the raw vibration sample: filteredZ = 0.7 × filteredZ 
++ 0.3 × rawZ. 
+4. Compare filteredZ against the vibration threshold. If the threshold is exceeded, subtract the 
+damping amount from the desired PWM to obtain the final PWM. Clamp the result to the range 
+[0, 255], with a minimum non-zero value of 120 to prevent motor stall. 
+5. Write the final PWM to the EN pin of the L293D using the ESP32 ledc peripheral at 5 kHz 
+switching frequency, 8-bit resolution. 
+6. Every 100 ms, broadcast a JSON telemetry packet over WebSocket to all connected browser 
+clients. 
